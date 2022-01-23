@@ -21,3 +21,9 @@ store also keeps track of the client’s birthdate. The store keeps track of eac
 by a client, by recording the date of purchase, the total amount paid for the visit, and the
 list of all the products purchased by the client in each transaction. Each purchase is made
 by a client and is associated with the cashier who processed the transaction.
+
+Walmart wants to be able to perform the following queries:
+1. Given the client ID of a client as an input parameter, find the names of the products
+purchased by that client.
+2. For each store, list the name of the customer that has spent the most money over
+the last month.
