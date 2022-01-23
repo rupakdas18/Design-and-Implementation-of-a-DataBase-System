@@ -1,0 +1,254 @@
+import java.sql.Connection;
+import java.sql.Statement;
+import java.util.Scanner;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPasswordField;
+import javax.swing.JTextField;
+
+import oracle.jdbc.pool.OracleDataSource;
+
+
+public class Simple {
+
+	String jdbcUrl = "jdbc:oracle:thin:@akka.d.umn.edu:1521:xe";
+	Connection conn;
+	boolean exit;
+
+// ------------------- Connection -------------------------------
+	public Connection getDBConnection() throws SQLException{ 
+		OracleDataSource ds = new OracleDataSource(); 
+		ds.setURL(jdbcUrl);
+
+		if(conn == null) {
+			// Display a message to get the password from the user 
+			JLabel label = new JLabel("Oracle Username: "); 
+			JTextField jtf = new JTextField();
+			JLabel label2 = new JLabel("Oracle Password:"); 
+			JPasswordField jpf = new JPasswordField(); 
+			JOptionPane.showConfirmDialog(null,
+					new Object[]{label, jtf, label2, jpf}, 
+					"Password:", JOptionPane.OK_CANCEL_OPTION);
+			
+			String password = String.valueOf(jpf.getPassword());
+			conn = ds.getConnection(jtf.getText(), password );
+		}
+		conn.setAutoCommit(true);
+		return conn;
+	}
+
+// ------------------- Main Function ----------------------------
+	public static void main(String[] args) throws Exception{ 
+		Simple q = new Simple();
+		q.runMenu();
+		
+	}
+
+	//--------- To Create a Table -------------
+	public void createTable() throws SQLException{
+		
+		
+		getDBConnection();
+		String createString = "CREATE TABLE Professors" +
+                "(emp_id VARCHAR(64), " + 
+                " firstname VARCHAR(64), " + 
+                " dept_name VARCHAR(64), " + 
+                " salary INTEGER," +
+                " PRIMARY KEY (emp_id))";
+		
+		try (Statement stmt = conn.createStatement()) {
+			conn.setAutoCommit(false);
+			stmt.executeUpdate(createString);
+			conn.commit();
+		    } catch (SQLException e) {
+		    	e.printStackTrace();
+		    }finally {
+				conn.setAutoCommit(true); 
+			}
+	}
+	
+	// ------------ Insert Data into table -------------------------
+	public boolean insertProfessor(String emp_id, String firstname,
+			String dept_name, int salary)
+					throws SQLException {
+		
+		assert(emp_id != null); 
+		assert(firstname != null); 
+		// Connect to the database. 
+		getDBConnection();
+		int updatedRows = 0;
+
+		// Elaborate a string with the content of the query to insert a professor
+		String sqlInsertProfessor =
+				"INSERT INTO professor VALUES(?,?,?,?)";
+ 
+		try(PreparedStatement profInsertStmt =
+				conn.prepareStatement(sqlInsertProfessor);){
+			// By disabling autocommit, that means that we need to call
+			// commit at the end to make the changes permanent.
+			conn.setAutoCommit(false);
+
+			// Set the values for the ? parameters when inserting a
+			// professor
+			profInsertStmt.setString(1, emp_id);
+			profInsertStmt.setString(2, firstname);
+			profInsertStmt.setString(3, dept_name);
+			profInsertStmt.setInt(4, salary);
+			
+			// Run the insert professor and insert degrees query
+			updatedRows  = profInsertStmt.executeUpdate();
+			
+			// Commit the transaction to make the changes permanent
+			conn.commit();
+
+		} catch(SQLException e) {
+			// Rollback the transaction
+			conn.rollback();
+			e.printStackTrace(); 
+		} finally {
+			conn.setAutoCommit(true); 
+		}
+		return updatedRows != 0;
+	}
+
+	//----------------- Query 1 -------------------------
+	public void QueryNumberOne(int id) throws SQLException{
+
+		String sqlQueryOne =
+				"SELECT DISTINCT product "
+				+ "FROM Purchase p INNER JOIN Purchase_list pl ON p.purchase_id=pl.purchase_id "
+				+ "WHERE p.client_id = ?";
+
+		try(PreparedStatement productSelectStmt =
+				conn.prepareStatement(sqlQueryOne);){
+
+			productSelectStmt.setInt(1, id);	
+			ResultSet rs  = productSelectStmt.executeQuery();
+			
+			while(rs.next()){
+
+		         String product_list  = rs.getString("product");	         
+		         System.out.println(product_list);
+			}
+
+		} catch(SQLException e) {
+			e.printStackTrace(); 
+		} 
+	}
+	
+	
+	//----------------- Query 2 -------------------------
+	
+	public void QueryNumbertwo() throws SQLException{
+		
+		int store_num = 0;
+		String numOfStore = 
+				"SELECT COUNT(DISTINCT store_id) AS total "
+				+"FROM has";
+		try(PreparedStatement storeStmt=
+				conn.prepareStatement(numOfStore);){
+			ResultSet store_nums = storeStmt.executeQuery();
+			while(store_nums.next()){
+				store_num = Integer.parseInt(store_nums.getString("total"));
+			}
+		}
+		
+
+		String sqlQuerytwo =
+				"SELECT  client_name, store_id, totalcost "
+				+"FROM (SELECT SUM(p.amount) AS totalcost,c.client_name, store_id,row_number() OVER (PARTITION BY store_id ORDER BY SUM(p.amount) DESC) "
+				+"FROM Purchase p JOIN HAS h ON p.client_id=h.client_id "
+				+"JOIN client_info c ON p.client_id=c.client_id " 
+				+"WHERE pur_date BETWEEN '01-JAN-2021' AND '30-JAN-2021' "
+				+"GROUP BY c.client_name,store_id "
+				+"ORDER BY (row_number() OVER (PARTITION BY store_id ORDER BY SUM(p.amount) DESC)),store_id) "
+				+"WHERE ROWNUM <= ?";
+		
+		try(PreparedStatement clientSelectStmt =
+				conn.prepareStatement(sqlQuerytwo);){
+
+			clientSelectStmt.setInt(1, store_num);	
+			ResultSet rs  = clientSelectStmt.executeQuery();
+			System.out.println("Client_name\tStore_id\tTotalcost");
+			while(rs.next()){
+
+		         String output  = rs.getString("client_name") +"\t"+ rs.getString("store_id")+"\t\t" + rs.getString("totalcost")   ;        
+		         System.out.println(output);
+			}
+
+		} catch(SQLException e) {
+			e.printStackTrace(); 
+		} 
+
+	}
+	
+
+	
+	// -------------------- Run Menu -------------------------------
+	public void runMenu() throws SQLException {
+		getDBConnection();
+		//printHeader();
+		printMenu();
+		while(!exit) {
+			//printMenu();
+			int choice = getInput();
+			performAction(choice);
+		}
+	}
+	
+	// ------------------- Print Menu ------------------------------
+	public void printMenu() {
+		System.out.println("\n------------Please Select a Query---------------");
+		System.out.println("Query 1: Given the client ID of a client as an input parameter, find the names of the products\r\n"
+				+ "purchased by that client.");
+		System.out.println("Query 2: For each store, list the name of the customer that has spent the most money over\r\n"
+				+ "the last month.");
+		System.out.println("Press 0 to end the program");
+
+	}
+	
+	// ------------------ Get input ---------------------------------
+	public int getInput() {
+		Scanner kb = new Scanner(System.in);
+		int choice = -1;
+		while(choice < 0 || choice > 2) {
+			try {
+				System.out.print(" \nEnter Query number: ");
+				choice = Integer.parseInt(kb.nextLine());
+			}
+			catch(NumberFormatException e){
+				System.out.println("Invalid Selection. Please try again");
+				
+			}
+		}
+		return choice;
+	}
+	
+	// ------------------------ Output ------------------------------
+	public void performAction(int choice) throws SQLException {
+		switch(choice) {		
+			case 0:
+				exit = true;
+				System.out.print("Program Ended.");
+				break;
+			case 1:		
+				Scanner kb = new Scanner(System.in);
+				System.out.print("Provide the id of customer: ");
+				int id = Integer.parseInt(kb.nextLine());
+				QueryNumberOne(id);
+				break;
+			case 2:
+								
+				QueryNumbertwo();
+				break;
+			default:
+				System.out.println("Unknown Error");
+		}
+	}
+	
+
+}
